@@ -1,38 +1,99 @@
 import numpy as np
-from skimage import data, color, filters, img_as_float
-from concurrent.futures import ThreadPoolExecutor
-
-img = color.rgb2gray(img_as_float(data.coins()))
-rows, cols = img.shape
-population_size = 10
-population = [np.random.rand(rows, cols) for _ in range(population_size)]
-
-def fitness(solution):
-    edges = filters.sobel(solution)
-    return np.sum(edges * img)
-
-def mutate(solution, rate=0.01):
-    mask = np.random.rand(*solution.shape) < rate
-    noise = np.random.rand(*solution.shape)
-    return np.clip(solution + mask * (noise - 0.5), 0, 1)
-
-def crossover(a, b):
-    mask = np.random.rand(*a.shape) > 0.5
-    return np.where(mask, a, b)
-
-def evolve_cell(i):
-    cell = population[i]
-    neighbors = [population[(i - 1) % population_size], population[(i + 1) % population_size]]
-    parent = max(neighbors, key=fitness)
-    child = mutate(crossover(cell, parent))
-    return child if fitness(child) > fitness(cell) else cell
-
-for _ in range(20):
-    with ThreadPoolExecutor() as executor:
-        population = list(executor.map(evolve_cell, range(population_size)))
-
-best = max(population, key=fitness)
 import matplotlib.pyplot as plt
-plt.imshow(filters.sobel(best), cmap='gray')
-plt.axis('off')
+
+# ============================================================
+# 1. Define Optimization Problem (fitness function)
+# Example: minimize f(x) = x^2   (can replace with lab problem)
+# ============================================================
+
+def fitness(x):
+    return x**2     # Minimization problem
+
+
+# ============================================================
+# 2. Initialize Parameters
+# ============================================================
+
+grid_size = 10          # 10x10 grid → 100 cells
+max_iter = 100          # iterations
+search_min = -10        # search space
+search_max = 10
+
+# Create grid of candidate solutions
+grid = np.random.uniform(search_min, search_max, (grid_size, grid_size))
+
+
+# ============================================================
+# 3. Evaluate fitness of all cells
+# ============================================================
+
+fitness_grid = fitness(grid)
+
+
+# ============================================================
+# Helper function: get 3x3 Moore neighborhood
+# ============================================================
+
+def get_neighborhood_values(mat, i, j):
+    # Extract 3×3 neighborhood with wrap-around
+    rows = [(i-1)%grid_size, i, (i+1)%grid_size]
+    cols = [(j-1)%grid_size, j, (j+1)%grid_size]
+    
+    neigh = mat[np.ix_(rows, cols)]
+    return neigh.flatten()
+
+
+# ============================================================
+# PCA Update Loop
+# ============================================================
+
+best_values = []   # track global best over time
+
+for t in range(max_iter):
+
+    new_grid = np.copy(grid)
+
+    # Parallel update (vectorized by operating on full grid)
+    for i in range(grid_size):
+        for j in range(grid_size):
+
+            # Step 1: Get neighborhood
+            neighborhood = get_neighborhood_values(grid, i, j)
+
+            # Step 2: Option 1 — best neighbor
+            best_neighbor = neighborhood[np.argmin(neighborhood**2)]
+
+            # Step 3: Option 2 — average of neighbors
+            avg_neighbor = np.mean(neighborhood)
+
+            # Choose update rule (best or average)
+            # new_grid[i,j] = best_neighbor
+            new_grid[i,j] = avg_neighbor    # more stable
+
+    # Update grid
+    grid = new_grid
+
+    # Recalculate fitness
+    fitness_grid = fitness(grid)
+
+    # Track global best
+    global_best = np.min(fitness_grid)
+    best_values.append(global_best)
+
+    print(f"Iteration {t+1}/{max_iter}  →  Best fitness = {global_best:.6f}")
+
+print("\nFinal Best Solution:", global_best)
+print("Best Cell Value:", grid[np.unravel_index(np.argmin(fitness_grid), fitness_grid.shape)])
+
+
+# ============================================================
+# Plot Convergence Curve
+# ============================================================
+
+plt.plot(best_values)
+plt.title("PCA Optimization Convergence")
+plt.xlabel("Iteration")
+plt.ylabel("Best Fitness Value")
+plt.grid(True)
 plt.show()
+
